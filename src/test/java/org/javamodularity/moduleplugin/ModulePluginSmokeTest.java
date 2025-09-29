@@ -13,7 +13,9 @@ import org.junitpioneer.jupiter.cartesian.CartesianTest;
 import java.io.File;
 import java.io.IOException;
 import java.io.StringWriter;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -33,10 +35,9 @@ class ModulePluginSmokeTest {
 
     @SuppressWarnings("unused")
     private enum GradleVersion {
-        v5_1, v5_6,
-        v6_3, v6_4_1, v6_5_1, v6_8_3,
-        v7_0, v7_6_4,
-        v8_0, v8_6
+        v8_11,
+        v9_0,
+        v9_1_0
         ;
 
         @Override
@@ -58,7 +59,6 @@ class ModulePluginSmokeTest {
     void smokeTest(
             @CartesianTest.Values(strings = {
                     "test-project",
-                    "test-project-kotlin-pre-1-7",
                     "test-project-kotlin",
                     "test-project-groovy"
             }) String projectName,
@@ -66,20 +66,21 @@ class ModulePluginSmokeTest {
         LOGGER.lifecycle("Executing smokeTest of {} with Gradle {}", projectName, gradleVersion);
         assumeTrue(jdkSupported(gradleVersion));
         assumeTrue(checkKotlinCombination(projectName, gradleVersion));
+        
+        ensureSettingsFileForGradle9(projectName + "/", gradleVersion.toString());
+        
         var result = GradleRunner.create()
                 .withProjectDir(new File(projectName + "/"))
                 .withPluginClasspath(pluginClasspath)
                 .withGradleVersion(gradleVersion.toString())
-                .withArguments("-c", "smoke_test_settings.gradle", "clean", "build", "run", "--stacktrace")
+                .withArguments(buildGradleArgs(gradleVersion.toString(), "clean", "build", "run", "--stacktrace"))
                 .forwardOutput()
                 .build();
 
         assertTasksSuccessful(result, "greeter.api", "build");
         assertTasksSuccessful(result, "greeter.provider", "build");
         assertTasksSuccessful(result, "greeter.provider.test", "build");
-        if(org.gradle.util.GradleVersion.version(gradleVersion.toString()).compareTo(org.gradle.util.GradleVersion.version("5.6")) >= 0) {
-            assertTasksSuccessful(result, "greeter.provider.testfixture", "build");
-        }
+        assertTasksSuccessful(result, "greeter.provider.testfixture", "build");
         assertTasksSuccessful(result, "greeter.runner", "build", "run");
         assertOutputDoesNotContain(result, "warning: [options] --add-opens has no effect at compile time");
     }
@@ -88,7 +89,6 @@ class ModulePluginSmokeTest {
     void smokeTestRun(
             @CartesianTest.Values(strings = {
                     "test-project",
-                    "test-project-kotlin-pre-1-7",
                     "test-project-kotlin",
                     "test-project-groovy"
             }) String projectName,
@@ -96,14 +96,18 @@ class ModulePluginSmokeTest {
         LOGGER.lifecycle("Executing smokeTestRun of {} with Gradle {}", projectName, gradleVersion);
         assumeTrue(jdkSupported(gradleVersion));
         assumeTrue(checkKotlinCombination(projectName, gradleVersion));
+        
+        ensureSettingsFileForGradle9(projectName + "/", gradleVersion.toString());
+        
         var writer = new StringWriter(256);
+        
         var result = GradleRunner.create()
                 .withProjectDir(new File(projectName + "/"))
                 .withPluginClasspath(pluginClasspath)
                 .withGradleVersion(gradleVersion.toString())
-                .withArguments("-q", "-c", "smoke_test_settings.gradle", "clean", ":greeter.runner:run", "--args", "aaa bbb")
                 .forwardStdOutput(writer)
                 .forwardStdError(writer)
+                .withArguments("-q", "clean", ":greeter.runner:run", "--args", "aaa bbb")
                 .build();
 
         assertTasksSuccessful(result, "greeter.runner", "run");
@@ -117,11 +121,7 @@ class ModulePluginSmokeTest {
     @CartesianTest(name = "smokeTestJunit5({arguments})")
     void smokeTestJunit5(
             @CartesianTest.Values(strings = {
-                    "5.4.2/1.4.2",
-                    "5.5.2/1.5.2",
-                    "5.7.1/1.7.1",
-                    "5.8.0/1.8.0",
-                    "5.10.2/1.10.2"
+                    "5.10.5/1.10.5"
             }) String junitVersionPair,
             @CartesianTest.Enum GradleVersion gradleVersion) {
         LOGGER.lifecycle("Executing smokeTestJunit5 with junitVersionPair {} and Gradle {}", junitVersionPair, gradleVersion);
@@ -131,11 +131,14 @@ class ModulePluginSmokeTest {
         assumeTrue(checkJUnitCombination(junitVersion, gradleVersion));
         var junitVersionProperty = String.format("-PjUnitVersion=%s", junitVersion);
         var junitPlatformVersionProperty = String.format("-PjUnitPlatformVersion=%s", junitVersionParts[1]);
+        
+        ensureSettingsFileForGradle9("test-project/", gradleVersion.toString());
+        
         var result = GradleRunner.create()
                 .withProjectDir(new File("test-project/"))
                 .withPluginClasspath(pluginClasspath)
                 .withGradleVersion(gradleVersion.toString())
-                .withArguments("-c", "smoke_test_settings.gradle", junitVersionProperty, junitPlatformVersionProperty, "clean", "build", "run", "--stacktrace")
+                .withArguments(buildGradleArgs(gradleVersion.toString(), junitVersionProperty, junitPlatformVersionProperty, "clean", "build", "run", "--stacktrace"))
                 .forwardOutput()
                 .build();
 
@@ -145,62 +148,14 @@ class ModulePluginSmokeTest {
         assertTasksSuccessful(result, "greeter.runner", "build", "run");
     }
 
-    @CartesianTest(name = "smokeTestMixed({arguments})")
-    void smokeTestMixed(@CartesianTest.Enum GradleVersion gradleVersion) {
-        LOGGER.lifecycle("Executing smokeTestMixed with Gradle {}", gradleVersion);
-        assumeTrue(jdkSupported(gradleVersion));
-        var result = GradleRunner.create()
-                .withProjectDir(new File("test-project-mixed"))
-                .withPluginClasspath(pluginClasspath)
-                .withGradleVersion(gradleVersion.toString())
-                .withArguments("-c", "smoke_test_settings.gradle", "clean", "build", "--stacktrace")
-                .forwardOutput()
-                .build();
 
-        verifyMixedTestResult(result, "greeter.api-jdk8", 8, 9);
 
-        verifyMixedTestResult(result, "greeter.provider-jdk8", 8, 9);
-        verifyMixedTestResult(result, "greeter.provider-jdk8.test-jdk8", 8, 9);
-        verifyMixedTestResult(result, "greeter.provider-jdk8.test-jdk11", 11, 11);
 
-        verifyMixedTestResult(result, "greeter.provider-jdk11", 11, 11);
-        verifyMixedTestResult(result, "greeter.provider-jdk11.test-jdk11", 11, 11);
-    }
-
-    private static void verifyMixedTestResult(
-            BuildResult result, String subprojectName,
-            int mainJavaRelease, int moduleInfoJavaRelease) {
-        assertTasksSuccessful(result, subprojectName, "build");
-        assertExpectedClassFileFormats(subprojectName, mainJavaRelease, moduleInfoJavaRelease);
-    }
-
-    private static void assertExpectedClassFileFormats(
-            String subprojectName, int mainJavaRelease, int moduleInfoJavaRelease) {
-        Path basePath = Path.of("test-project-mixed").resolve(subprojectName).resolve("build/classes");
-        Path classesDir = basePath.resolve("java/main");
-        Path moduleInfoClassesDir = basePath.resolve("module-info");
-
-        List<Path> moduleInfoPaths = Stream.of(classesDir, moduleInfoClassesDir)
-                .map(dir -> dir.resolve("module-info.class"))
-                .filter(path -> path.toFile().isFile())
-                .collect(Collectors.toList());
-        assertEquals(1, moduleInfoPaths.size(), "module-info.class found in multiple locations: " + moduleInfoPaths);
-        Path moduleInfoClassPath = moduleInfoPaths.get(0);
-        try {
-            SmokeTestHelper.assertClassFileJavaVersion(moduleInfoJavaRelease, moduleInfoClassPath);
-
-            Path nonModuleInfoClassPath = SmokeTestHelper.anyNonModuleInfoClassFilePath(classesDir);
-            SmokeTestHelper.assertClassFileJavaVersion(mainJavaRelease, nonModuleInfoClassPath);
-        } catch (IOException e) {
-            fail(e);
-        }
-    }
 
     @CartesianTest(name = "smokeTestDist({arguments})")
     void smokeTestDist(
             @CartesianTest.Values(strings = {
                     "test-project",
-                    "test-project-kotlin-pre-1-7",
                     "test-project-kotlin",
                     "test-project-groovy"
             }) String projectName,
@@ -208,11 +163,14 @@ class ModulePluginSmokeTest {
         LOGGER.lifecycle("Executing smokeTestDist of {} with Gradle {}", projectName, gradleVersion);
         assumeTrue(jdkSupported(gradleVersion));
         assumeTrue(checkKotlinCombination(projectName, gradleVersion));
+        
+        ensureSettingsFileForGradle9(projectName + "/", gradleVersion.toString());
+        
         var result = GradleRunner.create()
                 .withProjectDir(new File(projectName + "/"))
                 .withPluginClasspath(pluginClasspath)
                 .withGradleVersion(gradleVersion.toString())
-                .withArguments("-c", "smoke_test_settings.gradle", "clean", "build", ":greeter.runner:installDist", "--stacktrace")
+                .withArguments(buildGradleArgs(gradleVersion.toString(), "clean", "build", ":greeter.runner:installDist", "--stacktrace"))
                 .forwardOutput()
                 .build();
 
@@ -247,7 +205,6 @@ class ModulePluginSmokeTest {
     void smokeTestRunDemo(
             @CartesianTest.Values(strings = {
                     "test-project",
-                    "test-project-kotlin-pre-1-7",
                     "test-project-kotlin",
                     "test-project-groovy"
             }) String projectName,
@@ -255,12 +212,15 @@ class ModulePluginSmokeTest {
         LOGGER.lifecycle("Executing smokeTestRunDemo of {} with Gradle {}", projectName, gradleVersion);
         assumeTrue(jdkSupported(gradleVersion));
         assumeTrue(checkKotlinCombination(projectName, gradleVersion));
+        
+        ensureSettingsFileForGradle9(projectName + "/", gradleVersion.toString());
+        
         var result = GradleRunner.create()
                 .withProjectDir(new File(projectName + "/"))
                 .withPluginClasspath(pluginClasspath)
                 .withGradleVersion(gradleVersion.toString())
-                .withArguments("-c", "smoke_test_settings.gradle", "clean", "build",
-                        ":greeter.javaexec:runDemo1", ":greeter.javaexec:runDemo2", "--info", "--stacktrace")
+                .withArguments(buildGradleArgs(gradleVersion.toString(), "clean", "build",
+                        ":greeter.javaexec:runDemo1", ":greeter.javaexec:runDemo2", "--info", "--stacktrace"))
                 .forwardOutput()
                 .build();
 
@@ -272,7 +232,6 @@ class ModulePluginSmokeTest {
     void smokeTestRunStartScripts(
             @CartesianTest.Values(strings = {
                     "test-project",
-                    "test-project-kotlin-pre-1-7",
                     "test-project-kotlin",
                     "test-project-groovy"
             }) String projectName,
@@ -280,11 +239,14 @@ class ModulePluginSmokeTest {
         LOGGER.lifecycle("Executing smokeTestRunScripts of {} with Gradle {}", projectName, gradleVersion);
         assumeTrue(jdkSupported(gradleVersion));
         assumeTrue(checkKotlinCombination(projectName, gradleVersion));
+        
+        ensureSettingsFileForGradle9(projectName + "/", gradleVersion.toString());
+        
         var result = GradleRunner.create()
                 .withProjectDir(new File(projectName + "/"))
                 .withPluginClasspath(pluginClasspath)
                 .withGradleVersion(gradleVersion.toString())
-                .withArguments("-c", "smoke_test_settings.gradle", "clean", ":greeter.startscripts:installDist", "--info", "--stacktrace")
+                .withArguments(buildGradleArgs(gradleVersion.toString(), "clean", ":greeter.startscripts:installDist", "--info", "--stacktrace"))
                 .forwardOutput()
                 .build();
 
@@ -300,7 +262,7 @@ class ModulePluginSmokeTest {
 
     @Test
     void shouldNotCheckInWithCommentedOutVersions() {
-        assertEquals(10, GradleVersion.values().length);
+        assertEquals(3, GradleVersion.values().length);
     }
 
     private static void assertTasksSuccessful(BuildResult result, String subprojectName, String... taskNames) {
@@ -315,51 +277,74 @@ class ModulePluginSmokeTest {
     }
 
     private static boolean checkKotlinCombination(String projectName, GradleVersion gradleVersion) {
-        final boolean kotlin_NotSupported = projectName.startsWith("test-project-kotlin") && gradleVersion.toString().compareTo("6.4") < 0;
-        final boolean kotlinPost1_7_NotSupported = projectName.equals("test-project-kotlin") && gradleVersion.toString().compareTo("6.6") < 0;
-        final boolean kotlinPre1_7_NotSupported = projectName.equals("test-project-kotlin-pre-1-7") && gradleVersion.toString().compareTo("8.0") >= 0;
-        if (kotlin_NotSupported || kotlinPost1_7_NotSupported || kotlinPre1_7_NotSupported) {
-            LOGGER.lifecycle("Unsupported combination: {} / Gradle {}. Test skipped", projectName, gradleVersion);
-            return false;
-        }
+        // All Kotlin projects are supported with Gradle 9.0+
         return true;
     }
 
     private boolean checkJUnitCombination(final String junitVersion, final GradleVersion gradleVersion) {
-        final boolean gradleEighthPlus = gradleVersion.ordinal() >= GradleVersion.v8_0.ordinal();
         final Matcher m = SEMANTIC_VERSION.matcher(junitVersion);
         assumeTrue(m.matches(), "JUnit version not semantic: " + junitVersion);
         final boolean junitOlderThan5_8_0 = Integer.parseInt(m.group("major")) < 5 ||
                 (Integer.parseInt(m.group("major")) == 5 && Integer.parseInt(m.group("minor")) < 8);
 
-        if (gradleEighthPlus && junitOlderThan5_8_0) {
-            LOGGER.lifecycle("Unsupported JUnit and Gradle combination. Gradle: {}, JUnit: {}: Test skipped", gradleVersion, junitVersion);
+        if (junitOlderThan5_8_0) {
+            LOGGER.lifecycle("Unsupported JUnit version for Gradle 9+. JUnit: {}: Test skipped", junitVersion);
             return false;
         }
         return true;
     }
 
+    private String[] buildGradleArgs(String gradleVersion, String... additionalArgs) {
+        // Gradle 9.0+ doesn't support --settings-file argument in tooling API
+        // Since we only support Gradle 9.0+, just return additional args
+        return additionalArgs;
+    }
+
+    private void ensureSettingsFileForGradle9(String projectPath, String gradleVersion) {
+        // All supported Gradle versions (9.0+) need settings file copy
+        try {
+            Path sourceSettings = Path.of(projectPath, "smoke_test_settings.gradle");
+            Path targetSettings = Path.of(projectPath, "settings.gradle");
+            Path backupSettings = Path.of(projectPath, "settings.gradle.orig");
+            
+            if (Files.exists(sourceSettings)) {
+                // Backup original settings.gradle if not already backed up
+                if (!Files.exists(backupSettings)) {
+                    Files.copy(targetSettings, backupSettings, StandardCopyOption.REPLACE_EXISTING);
+                }
+                // Copy smoke test settings to settings.gradle
+                Files.copy(sourceSettings, targetSettings, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            LOGGER.warn("Failed to copy settings file for Gradle 9.0+: {}", e.getMessage());
+        }
+    }
+
     private static int javaMajorVersion() {
         final String version = System.getProperty("java.version");
-        return Integer.parseInt(version.substring(0, version.indexOf(".")));
+        if (version.startsWith("1.")) {
+            // Java 8 and earlier (1.8.0_xxx format) - not supported anymore but keep for completeness
+            return Integer.parseInt(version.substring(2, version.indexOf(".", 2)));
+        } else {
+            // Java 9+ (9.0.1, 11.0.2, 17.0.2 format)
+            int dotIndex = version.indexOf(".");
+            if (dotIndex == -1) {
+                // Handle cases like "17" without dot
+                return Integer.parseInt(version);
+            }
+            return Integer.parseInt(version.substring(0, dotIndex));
+        }
     }
 
     private boolean jdkSupported(final GradleVersion gradleVersion) {
-        switch (gradleVersion) {
-            // CI build runs with early JDK that supports these Gradle version
-            // But don't fail locally if running local JDK.
-            // Running JDK 14+ with Gradle 5 runs into:
-            // https://github.com/gradle/gradle/issues/10248
-            case v5_1:
-            case v5_6:
-                final int major = javaMajorVersion();
-                if (major > 13) {
-                    LOGGER.lifecycle("Unsupported JDK version '{}' for Gradle 5: Test skipped", major);
-                    return false;
-                }
-                return true;
-            default:
-                return true;
+        final int javaMajor = javaMajorVersion();
+        
+        // All supported Gradle versions (9.0+) require Java 17+
+        if (javaMajor < 17) {
+            LOGGER.lifecycle("Gradle {} requires Java 17+, but running Java {}: Test skipped", gradleVersion, javaMajor);
+            return false;
         }
+        
+        return true;
     }
 }

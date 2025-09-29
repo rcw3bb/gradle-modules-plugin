@@ -1,16 +1,11 @@
-import org.gradle.util.GradleVersion
-
-rootProject.name = 'test-project-groovy'
-
-include 'greeter.api'
-
-include 'greeter.provider'
-include 'greeter.provider.test'
-
-if(GradleVersion.current().compareTo(GradleVersion.version("5.6")) >= 0) {
-    include 'greeter.provider.testfixture'
+pluginManagement {
+    repositories {
+        gradlePluginPortal().with {
+            content {
+                excludeGroup 'org.javamodularity.moduleplugin' // added to the classpath by the smoke test
+            }
+        }
+    }
 }
 
-include 'greeter.runner'
-include 'greeter.javaexec'
-include 'greeter.startscripts'
+apply from: 'settings.gradle.orig'

@@ -2,7 +2,8 @@ package org.javamodularity.moduleplugin.tasks;
 
 import org.gradle.api.GradleException;
 import org.gradle.api.Project;
-import org.gradle.api.plugins.ApplicationPluginConvention;
+import org.gradle.api.plugins.JavaApplication;
+import org.gradle.api.tasks.Input;
 import org.gradle.api.tasks.Internal;
 import org.gradle.api.tasks.application.CreateStartScripts;
 
@@ -22,12 +23,12 @@ public class ModularCreateStartScripts extends CreateStartScripts {
         setClasspath(getProject().files());
     }
 
+    @Input
     @Nullable
-    @Override
     public String getMainClassName() {
         String main = changedMain;
         if(main == null) {
-            main = super.getMainClassName();
+            main = getMainClass().getOrNull();
         }
         if(main == null) {
             main = UNDEFINED_MAIN_CLASS_NAME;
@@ -35,9 +36,9 @@ public class ModularCreateStartScripts extends CreateStartScripts {
         return main;
     }
 
-    @Override
     public void setMainClassName(@Nullable String mainClassName) {
         changedMain = mainClassName;
+        getMainClass().set(mainClassName);
     }
 
     public ModularJavaExec getRunTask() {
@@ -59,10 +60,10 @@ public class ModularCreateStartScripts extends CreateStartScripts {
     }
 
     private static void configure(ModularCreateStartScripts startScriptsTask, Project project) {
-        var appConvention = project.getConvention().findPlugin(ApplicationPluginConvention.class);
-        if (appConvention != null) {
-            var distDir = project.file(project.getBuildDir() + "/install/" + appConvention.getApplicationName());
-            startScriptsTask.setOutputDir(new File(distDir, appConvention.getExecutableDir()));
+        JavaApplication appExtension = project.getExtensions().findByType(JavaApplication.class);
+        if (appExtension != null) {
+            var distDir = project.file(project.getLayout().getBuildDirectory().get().getAsFile() + "/install/" + appExtension.getApplicationName());
+            startScriptsTask.setOutputDir(new File(distDir, appExtension.getExecutableDir()));
         }
 
         ModularJavaExec runTask = startScriptsTask.getRunTask();

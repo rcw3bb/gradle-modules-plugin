@@ -35,7 +35,7 @@ public final class CompileModuleInfoHelper {
         return project.getConfigurations().stream()
                 .flatMap(configuration -> configuration.getDependencies().stream())
                 .filter(dependency -> dependency instanceof ProjectDependency)
-                .map(dependency -> ((ProjectDependency) dependency).getDependencyProject().getTasks())
+                .map(dependency -> project.project(((ProjectDependency) dependency).getPath()).getTasks())
                 .map(tasks -> tasks.findByName(CompileModuleOptions.COMPILE_MODULE_INFO_TASK_NAME))
                 .filter(Objects::nonNull)
                 .filter(task -> task.getProject() != project);

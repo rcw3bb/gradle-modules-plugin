@@ -24,11 +24,11 @@ abstract class AbstractExecutionMutator {
     protected final String getMainClassName() {
         if(GradleVersion.current().compareTo(GradleVersion.version("6.4")) < 0) {
             String mainClassName = Objects.requireNonNull(
-                    execTask.getMain(),
-                    "Main class name not found. Try setting 'application.mainClassName' in your Gradle build file."
+                    execTask.getMainClass().getOrNull(),
+                    "Main class name not found. Try setting 'application.mainClass' in your Gradle build file."
             );
             if (!mainClassName.contains("/")) {
-                    LOGGER.warn("No module was provided for main class, assuming the current module. Prefer providing 'mainClassName' in the following format: '$moduleName/a.b.Main'");
+                    LOGGER.warn("No module was provided for main class, assuming the current module. Prefer providing 'mainClass' in the following format: '$moduleName/a.b.Main'");
                 return helper().moduleName() + "/" + mainClassName;
             }
             return mainClassName;

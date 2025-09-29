@@ -105,6 +105,13 @@ public enum TestEngine {
     }
 
     private static Stream<GroupArtifact> getModuleIdentifiers(Configuration origCfg, Set<File> files) {
+        // Check if the configuration can be resolved
+        if (!origCfg.isCanBeResolved()) {
+            LOGGER.debug("Configuration {} cannot be resolved, using direct dependencies only", origCfg.getName());
+            return origCfg.getDependencies().stream()
+                    .map(dep -> new GroupArtifact(dep.getGroup(), dep.getName()));
+        }
+        
         Configuration cfg = origCfg.copyRecursive();
         cfg.setCanBeResolved(true);
         try {

@@ -1,7 +1,7 @@
 //region NO-OP (DSL testing)
 
 // one of the supported Java version (prefer LTS version)
-def toolchainVer = 11
+def toolchainVer = 21
 
 java {
     toolchain {
@@ -13,6 +13,6 @@ modularity {
     // This version should be less than `toolchainVer` because:
     // * if the version is same to `toolchainVer` we cannot reproduce the existing problem
     // * if the version is greather than `toolchainVer` javac cannot create class files
-    standardJavaRelease(9)
+    standardJavaRelease(17)
 }
 //endregion

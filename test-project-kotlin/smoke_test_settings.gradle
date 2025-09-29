@@ -8,4 +8,4 @@ pluginManagement {
     }
 }
 
-apply from: 'settings.gradle'
+apply from: 'settings.gradle.orig'

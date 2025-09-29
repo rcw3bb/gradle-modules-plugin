@@ -21,20 +21,18 @@ subprojects {
     //endregion
 
     //region KOTLIN
-    if (gradle.gradleVersion >= "8.0") {
-        configure<JavaPluginExtension> {
-            toolchain {
-                languageVersion.set(JavaLanguageVersion.of(11))
-            }
-        }
-    } else {
-        tasks.withType<KotlinCompile> {
-            kotlinOptions.jvmTarget = "1.8"
+    configure<JavaPluginExtension> {
+        toolchain {
+            languageVersion.set(JavaLanguageVersion.of(17))
         }
     }
 
+    tasks.withType<KotlinCompile> {
+        kotlinOptions.jvmTarget = "17"
+    }
+
     dependencies {
-        implementation(kotlin("stdlib-jdk8"))
+        implementation(kotlin("stdlib"))
     }
     //endregion
 
@@ -58,7 +56,7 @@ subprojects {
     dependencies {
         testImplementation("org.junit.jupiter:junit-jupiter-api:$jUnitVersion")
         testImplementation("org.junit.jupiter:junit-jupiter-params:$jUnitVersion")
-        testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:$jUnitVersion")
+        testImplementation("org.junit.jupiter:junit-jupiter-engine:$jUnitVersion")
         testRuntimeOnly("org.junit.platform:junit-platform-launcher:$jUnitPlatformVersion")
     }
 }
